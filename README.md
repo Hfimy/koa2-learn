@@ -1,6 +1,6 @@
 # koa2-learn
 
-## 一、环境准备：安装node.js，版本号大于`7.6`
+## 一、环境准备：安装node.js，建议版本号大于`7.6`，否则需额外安装插件。
 <br>
 
   - 直接安装 node.js ：node.js官网地址 [https://nodejs.org](https://nodejs.org)
@@ -21,7 +21,7 @@
 npm i koa -S
 ```
 ## 二、middleware中间件
-在HelloWorld中，代码如下
+在HelloWorld的demo中，代码如下
 
 ```js
 const Koa = require('koa');
@@ -34,7 +34,7 @@ app.use(async (ctx,next) => {
 
 app.listen(3000);
 ``` 
-它的作用是：每收到一个 `http` 请求，`Koa` 都会调用通过 `app.use()` 注册的 `async` 函数，同时为该函数传入 `ctx` 和 `next` 两个参数。
+它的作用是：每收到一个 `http` 请求，`Koa` 都会调用通过 `app.use()` 注册的 `async` 函数，同时为该函数传入 `ctx` 和 `next` 两个参数，最后给页面返回一个`Hello World'.
 <br>
 
 **这里的 `async` 函数就是我们所说的中间件。正是因为中间件的扩展性才使得 `Koa` 的代码简单灵活。**
