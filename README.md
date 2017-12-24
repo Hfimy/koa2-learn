@@ -291,3 +291,39 @@ router.get('/:category/:title', function (ctx, next) {
   // => { category: 'programming', title: 'how-to-node' } 
 });
 ```
+## 三、解析请求数据
+当我们捕获到请求后，一般都需要把请求传递过来的数据解析出来。数据传递过来的方式一般有三种：
+* get请求，请求参数为`URL`路径后面以`?`开头的查询参数：如`http://localhost:3000/home?id=1&name=hfimy`。使用`ctx.request.query`或`ctx.request.querystring`可以获取到查询参数。不同的是`query`返回的是对象，`querystring`返回的是字符串。
+```
+  router.get('/home', async(ctx, next) => {
+    console.log('query:',ctx.request.query)
+    console.log('querystring:',ctx.request.querystring)
+    ctx.response.body = '<h1>HOME page</h1>'
+  })
+```
+访问`http://localhost:3000/home?id=1&name=hfimy`，控制台输出如下
+```
+query: {id:'1',name:'hfimy'}
+querystring: id=1&name=hfimy
+```
+* get请求，请求参数放在`URL`路径里面，如`http://localhost:3000/home/1/hfimy`。这种情况下，`koa-router`会把请求参数解析在`params`对象上，通过`ctx.params`可以获取到这个对象。
+```
+  router.get('/home/:id/:name', async(ctx, next) => {
+    console.log(ctx.params)
+    ctx.response.body = '<h1>HOME page</h1>'
+  })
+```
+访问`http://localhost:3000/home/1/hfimy`，控制台输出如下
+```
+{id:'1',name:'hfimy'}
+```
+* post请求，请求参数放在`body`里面。当用 `post` 方式请求时，我们会遇到一个问题：`post` 请求通常都会通过表单或 `JSON` 形式发送，而无论是 `Node` 还是 `Koa`，都 **没有提供** 解析 `post` 请求参数的功能。这里，我们将引入一个`koa-bodyparser`包，安装完成之后，我们需要在 `app.js` 中引入中间件并应用： 
+```
+  const Koa = require('koa')
+  const router = require('koa-router')()
+  const bodyParser = require('koa-bodyparser')
+  const app = new Koa()
+
+  app.use(bodyParser())
+```
+不管是通过表单提交还是以`JSON`形式发送，我们都可以通过`ctx.request.body`获取到提交的数据。

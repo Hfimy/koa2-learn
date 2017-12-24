@@ -18,6 +18,8 @@
   "homepage": "https://github.com/Hfimy/koa2-learn#readme",
   "dependencies": {
     "koa": "^2.4.1",
+    "koa-bodyparser": "^4.2.0",
+    "koa-json": "^2.0.2",
     "koa-router": "^7.3.0"
   }
 }
