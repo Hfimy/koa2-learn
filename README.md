@@ -20,7 +20,7 @@
 ```js
 cnpm i koa -S
 ```
-## 一、middleware中间件
+## 一、认识middleware中间件
 在HelloWorld的demo中，代码如下
 
 ```js
@@ -291,7 +291,7 @@ router.get('/:category/:title', function (ctx, next) {
   // => { category: 'programming', title: 'how-to-node' } 
 });
 ```
-## 三、解析请求数据
+## 三、解析请求参数
 当我们捕获到请求后，一般都需要把请求传递过来的数据解析出来。数据传递过来的方式一般有三种：
 * get请求，请求参数为`URL`路径后面以`?`开头的查询参数：如`http://localhost:3000/home?id=1&name=hfimy`。使用`ctx.request.query`或`ctx.request.querystring`可以获取到查询参数。不同的是`query`返回的是对象，`querystring`返回的是字符串。
 ```
@@ -327,3 +327,113 @@ querystring: id=1&name=hfimy
   app.use(bodyParser())
 ```
 不管是通过表单提交还是以`JSON`形式发送，我们都可以通过`ctx.request.body`获取到提交的数据。
+## 四、指定静态资源目录
+这里介绍一个在`koa`中提供静态资源访问的第三方中间件：`koa-static`，用法与express中的`express-static`基本一致，指定静态文件目录即可。一般在app.js同级目录下创建一个`public`目录，用来存放静态文件。
+```
+...
+const static = require('koa-static')
+...
+//注意，提供静态资源访问的中间件需要放在路由中间件的前面使用
+app.use(static(path.resolve(__dirname, "./public")))
+```
+## 五、常用中间件
+#### 1. 返回json格式的数据 
+如果需要响应返回json数据，我们只需要设置响应数据类型为`json`格式，并把json数据挂载在响应体`body`上即可实现返回`json`数据。
+```
+ctx.set("Content-Type", "application/json")
+ctx.body = JSON.stringify(jsonData)
+```
+但是这样每次返回响应都需要写重复的代码，我们再次引入一个`koa-json`中间件，它会自动将我们返回的数据转换为`json`格式。
+```
+const Koa = require('koa');
+const json = require('koa-json');
+const app = new Koa();
+
+app.use(json());
+
+app.use((ctx) => {
+  ctx.body = { name: 'hfimy',age:23 };
+});
+```
+```
+$ GET /
+
+{
+  "name": "ht",
+  "age": 23
+}
+```
+#### 2. 记录日志
+`log4js` 是 Node.js 中一个成熟的记录日志的第三方模块。<br>
+* 日志分类 :日志可以大体上分为访问日志和应用日志。访问日志一般记录客户端对项目的访问，主要是 `http` 请求。这些数据属于运营数据，也可以反过来帮助改进和提升网站的性能和用户体验；应用日志是项目中需要特殊标记和记录的位置打印的日志，包括出现异常的情况，方便开发人员查询项目的运行状态和定位 `bug` 。应用日志包含了`debug`、`info`、`warn` 和 `error`等级别的日志。 
+
+* 日志等级：`log4js` 中的日志输出可分为如下7个等级：<br>
+  `ALL、TRACE、DEBUG、INFO、WARN、ERROR、FATAL、MARK、OFF`<br>
+  `ALL`：输出所有的日志 <br>
+  `OFF`：所有日志都不输出<br>
+  其它：输出级别相等或者高级别的日志。<br>
+
+在应用中按照级别记录了日志之后，可以按照指定级别输出高于指定级别的日志。 
+
+`log4js` 官方简单示例
+```js
+const log4js = require('log4js');
+const logger = log4js.getLogger();
+logger.level = 'debug';
+logger.debug("Some debug messages");
+```
+运行该代码，可以在终端看到如下输出：
+```
+[2017-12-24T16:45:45.101] [DEBUG] default - Some debug messages
+```
+一段带有日期、时间、日志级别和调用 debug 方法时传入的字符串的文本日志。实现了简单的终端日志输出。
+
+`log4js` 官方复杂示例
+```js
+const log4js = require('log4js');
+log4js.configure({
+  appenders: { cheese: { type: 'file', filename: 'cheese.log' } },
+  categories: { default: { appenders: ['cheese'], level: 'error' } }
+});
+const logger = log4js.getLogger('cheese');
+logger.trace('Entering cheese testing');
+logger.debug('Got cheese.');
+logger.info('Cheese is Gouda.');
+logger.warn('Cheese is quite smelly.');
+logger.error('Cheese is too ripe!');
+logger.fatal('Cheese was breeding ground for listeria.');
+``` 
+再次运行，在当前目录下会生成一个日志文件`cheese.log`文件，文件中有两条日志并记录了`error`及以上级别的信息，如下
+```
+[2017-12-24T17:03:42.761] [ERROR] cheese - Cheese is too ripe!
+[2017-12-24T17:03:42.761] [FATAL] cheese - Cheese was breeding ground for listeria.
+```
+我们可以通过自定义实现日志中间件，把`logger`对象挂载到`ctx`上下文中，从而在应用的其它地方都可以输出日志。<br>
+日志切割：当我们的项目在线上环境稳定运行后，访问量会越来越大，日志文件也会越来越大。日益增大的文件对查看和跟踪问题带来了诸多不便，同时增大了服务器的压力。虽然可以按照类型将日志分为两个文件，但并不会有太大的改善。所以我们按照日期将日志文件进行分割。比如：今天将日志输出到 task-2017-12-24.log 文件，明天会输出到 task-2017-12-25.log 文件。减小单个文件的大小不仅方便开发人员按照日期排查问题，还方便对日志文件进行迁移。因此，我们修改日志类型为日期文件，按照日期切割日志输出，以减小单个日志文件的大小。如下，修改代码：
+```
+log4js.configure({
+    appenders: {
+        cheese: {
+            type: 'dateFile', // 日志类型 
+            filename: `logs/task`,  // 输出的文件名
+            pattern: '-yyyy-MM-dd.log',  // 文件名增加后缀
+            alwaysIncludePattern: true   // 是否总是有后缀名
+        }
+    },
+    categories: { default: { appenders: ['cheese'], level: 'error' } }
+});
+```
+这样，在当前目录下会生成一个`logs`目录，并生成一个`task-2017-12-24.log`日志文件。<br>
+
+除了`log4js`以外，还有十分简洁的`koa-logger`日志中间件，直接在控制台中输出
+```
+const logger = require('koa-logger')
+const Koa = require('koa')
+ 
+const app = new Koa()
+app.use(logger())
+```
+#### 3. 处理错误请求
+#### 4. 视图views
+## 六、代码目录结构
+## 七、运行部署
