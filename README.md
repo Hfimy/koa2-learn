@@ -415,7 +415,7 @@ log4js.configure({
     appenders: {
         cheese: {
             type: 'dateFile', // 日志类型 
-            filename: `logs/task`,  // 输出的文件名
+            filename: `log/task`,  // 输出的文件名
             pattern: '-yyyy-MM-dd.log',  // 文件名增加后缀
             alwaysIncludePattern: true   // 是否总是有后缀名
         }
@@ -423,7 +423,7 @@ log4js.configure({
     categories: { default: { appenders: ['cheese'], level: 'error' } }
 });
 ```
-这样，在当前目录下会生成一个`logs`目录，并生成一个`task-2017-12-24.log`日志文件。<br>
+这样，在当前目录下会生成一个`log`目录，并生成一个`task-2017-12-24.log`日志文件。<br>
 
 除了`log4js`以外，还有十分简洁的`koa-logger`日志中间件，直接在控制台中输出
 ```
@@ -433,7 +433,173 @@ const Koa = require('koa')
 const app = new Koa()
 app.use(logger())
 ```
-#### 3. 处理错误请求
-#### 4. 视图views
+#### 3. 错误处理
+错误处理是应用健壮性非常重要的一部分。koa 里面提供了 `error` 事件，当发生错误时，可以通过监听该事件，对错误进行统一的处理。
+```
+const koa = require('koa');
+const app = koa();
+//当发生错误的时候可以将错误信息写入日志
+app.on('error', (err,ctx)=>{
+    if (process.env.NODE_ENV != 'test') {
+        console.log(err.message);
+        console.log(err);
+        //ctx.logger.error(err)
+    }
+});   
+
+```
+这里我们引入一个`koa-onerror`中间件，优化错误处理信息。
+```
+const fs = require('fs');
+const koa = require('koa');
+const onerror = require('koa-onerror');
+ 
+const app = new koa();
+ 
+onerror(app);
+ 
+app.use(ctx => {
+  // foo();
+  ctx.body = fs.createReadStream('not exist');
+});
+```
+
+#### 4. 视图view
+可以根据选择的模板引擎来定义视图。下面简单介绍如何引入模板引擎
+* 使用ejs模板引擎：`koa-ejs`
+```
+const Koa = require('koa');
+const render = require('koa-ejs');
+const path = require('path');
+ 
+const app = new Koa();
+render(app, {
+  root: path.join(__dirname, 'view'),
+  layout: 'template',
+  viewExt: 'html',
+  cache: false,
+  debug: true
+});
+ 
+app.use(async function (ctx) {
+  await ctx.render('user');
+});
+ 
+app.listen(7001);
+```
+* 使用xtemplate模板引擎：`koa-xtpl`
+```
+const path = require('path')
+const Koa = require('koa')
+const xtpl = require('koa-xtpl')
+const app = new Koa()
+ 
+// root 
+app.use(xtpl(path.join(__dirname, 'views')))
+// or options 
+app.use(xtpl({
+  root: path.join(__dirname, 'views'),
+  extname: 'xtpl',
+  commands: {}
+}))
+ 
+app.use(async ctx => {
+  await ctx.render('demo', { title: new Date() })
+})
+ 
+app.listen(3000)
+```
+* `kow-views`：可以自定义使用不同的模板
+```
+var views = require('koa-views');
+ 
+// Must be used before any router is used
+app.use(views(__dirname + '/views', {
+  map: {
+    html: 'underscore'
+  }
+}));
+ 
+app.use(async function (ctx, next) {
+  ctx.state = {
+    session: this.session,
+    title: 'app'
+  };
+ 
+  await ctx.render('user', {
+    user: 'John'
+  });
+});
+```
 ## 六、代码目录结构
+在真正的应用开发中，我们不可能将所有代码都写在`app.js`中，一般会将代码进行分层。<br>
+#### 1. 分离路由
+我们将所有的`router`抽离出来，在`app.js`同级目录创建一个`router`目录，并在`index.js`文件中暴露接口，这样可以进一步将对应的路由处理逻辑放在不同的文件里。然后只需要在`app.js`中引入路由主文件，将`app`传入即可
+```
+// app.js 
+const router=require('./router/index')
+...
+router(app)
+```
+```
+// router/index.js
+const router = require('koa-router')()
+module.export=(app)=>{
+  router.get('/',async (ctx,next)=>{
+    ...
+    await next();
+    ...
+  })
+  ...
+  app.use(router.routes(),router.allowedMethods())
+
+}
+```
+#### 2. 分离`controller`层，新增一个`controller`文件夹，将`router`对应路由的业务处理逻辑提取出来，如下
+```
+// controller/home.js
+module.export={
+  index:async (ctx,next)=>{
+    ...
+  },
+  home:async (ctx,next)=>{
+    ctx.body='<h1>Home Page</h1>'
+  }
+}
+```
+```
+// router/index.js
+const router = require('koa-router')()
+const HomeController = require('../controller/home')
+module.export=(app)=>{
+  router.get('/',HomeController.home)
+  ...
+  app.use(router.routes(),router.allowedMethods())
+
+}
+```
+目前的代码结构目录已经比较清晰了，适用于以 node 作为中间层的项目。如果想要把 node 作为真正的后端去操作数据库等，建议再分出一层 service，用于处理数据层面的交互，比如调用 model 处理数据库，调用第三方接口等，而controller 里面只做一些简单的参数处理。<br>
+
+#### 3. 分离中间件
+此外，随着项目的增大，中间件的数量也越来越多，建议可以把所有的中间件抽出来放在一个`middleware`文件夹下，不管是第三方中间件，还是自定义的中间件，统一放在此处处理。
+#### 4. view
+提供视图，根据选择的模板引擎定义视图，可以通过`render`渲染后作为响应主体返回给前端，也可以定义一些错误页面如404等。
+#### 5. public静态文件目录以及log日志文件目录。
+最终的应用结构如下：
+
+![](./public/image/co3.png)
+
+
 ## 七、运行部署
+* 运行：采用 nodemon 来代替 node 以启动应用。当代码发生变化时候，nodemon 会帮我们自动重启。
+```
+cnpm i nodemon -g
+...
+nodemon app.js
+```
+* 部署：使用 pm2，pm2 是一个带有负载均衡功能的Node应用的进程管理器。
+```
+cnpm i pm2 -g
+...
+pm2 start app.js
+```
